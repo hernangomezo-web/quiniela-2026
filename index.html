@@ -189,28 +189,16 @@ function StandingsPanel({g, ms, onUse}) {
   );
 }
 
-// ── LOGOS ─────────────────────────────────────────────────────────────────────
-function LogoBadge({top, bottom, right}) {
-  return (
-    <div style={{background:`linear-gradient(135deg,#0D1B2E,#07101E)`,border:`1.5px solid ${C.gold}`,borderRadius:9,padding:"5px 12px",textAlign:"center",minWidth:54}}>
-      <div style={{fontSize:right?11:13,fontWeight:800,color:C.goldL,letterSpacing:right?1:2,lineHeight:1.1}}>{top}</div>
-      <div style={{fontSize:7,color:C.muted,letterSpacing:0.8,marginTop:2,textTransform:"uppercase"}}>{bottom}</div>
-    </div>
-  );
-}
+
 
 // ── HEADER ────────────────────────────────────────────────────────────────────
 function Header({cd}){
-  return <div style={{background:"linear-gradient(180deg,#030810,#07101E)",borderBottom:`1px solid ${C.border}`,padding:"12px 16px 14px",position:"sticky",top:0,zIndex:50}}>
-    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
-      <LogoBadge top="HG" bottom="Hernán G."/>
-      <div style={{flex:1,textAlign:"center",padding:"0 6px"}}>
-        <div style={{fontSize:9,color:C.muted,letterSpacing:3,textTransform:"uppercase",marginBottom:2}}>Quiniela Familiar · Mundial 2026</div>
-        <div style={{fontSize:17,fontWeight:800,background:`linear-gradient(90deg,${C.goldL},${C.gold})`,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",lineHeight:1.2}}>⚽ GÓMEZ COSME CUP 2026</div>
-      </div>
-      <LogoBadge top="⚗️" bottom="Crisol" right/>
+  return <div style={{background:"linear-gradient(180deg,#030810,#07101E)",borderBottom:`1px solid ${C.border}`,padding:"12px 16px 10px",position:"sticky",top:0,zIndex:50}}>
+    <div style={{textAlign:"center",marginBottom:8}}>
+      <div style={{fontSize:9,color:C.muted,letterSpacing:3,textTransform:"uppercase",marginBottom:2}}>Quiniela Familiar · Mundial 2026</div>
+      <div style={{fontSize:17,fontWeight:800,background:`linear-gradient(90deg,${C.goldL},${C.gold})`,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",lineHeight:1.2}}>⚽ GÓMEZ COSME CUP 2026</div>
     </div>
-    <div style={{textAlign:"center"}}>
+    <div style={{textAlign:"center",marginBottom:8}}>
       {!cd.started
         ?<div>
           <div style={{fontSize:9,color:C.muted,letterSpacing:2,marginBottom:5}}>ARRANCA EN</div>
@@ -225,6 +213,9 @@ function Header({cd}){
         </div>
         :<div style={{color:C.green,fontSize:12,fontWeight:700}}>🟢 ¡EL MUNDIAL YA COMENZÓ!</div>
       }
+    </div>
+    <div style={{textAlign:"center",paddingTop:8,borderTop:`1px solid rgba(200,146,42,0.12)`}}>
+      <img src="./logo.png" alt="Hernán Gómez" style={{height:38,width:"auto",objectFit:"contain"}}/>
     </div>
   </div>;
 }
