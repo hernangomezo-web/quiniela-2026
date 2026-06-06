@@ -30,7 +30,6 @@ const db = createClient(
   'sb_publishable_TImdFq5dNwhYlATI2NkZwg_Le-6IjYb'
 );
 const uuid = () => typeof crypto!=='undefined'&&crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=Math.random()*16|0;return(c==='x'?r:(r&0x3|0x8)).toString(16);});
-
 async function dbLoad(){
   try{
     const[pRes,rRes]=await Promise.all([db.from('participants').select('*'),db.from('results').select('*').eq('id',1)]);
@@ -73,9 +72,7 @@ const fl=t=>FLAGS[t]||"🏳️";
 const EUR_TEAMS=["Alemania","Austria","Bélgica","Bosnia y Herzegovina","Croacia","Escocia","España","Francia","Inglaterra","Noruega","Países Bajos","Portugal","República Checa","Suecia","Suiza","Turquía"];
 const ALL_TEAMS=Object.values(GROUPS).flat().sort((a,b)=>a.localeCompare(b,"es"));
 const PTS={CHAMPION:25,RUNNER_UP:15,THIRD:10,SCORER:10,GRP_1ST:6,GRP_2ND:3,EXTRA_TIME:5,PENALTIES:5,TOP_EUR:8,EXACT:4,RESULT:2};
-const MAX_MATCH_PTS=72*4;
-const MAX_GLOBAL_PTS=25+15+10+10+(12*(6+3))+5+5+8;
-const MAX_PTS=MAX_MATCH_PTS+MAX_GLOBAL_PTS;
+const MAX_PTS=72*4+25+15+10+10+(12*(6+3))+5+5+8;
 const ADMIN_PIN="Mundial26";
 const WC_START=new Date("2026-06-12T01:00:00Z");
 const GRP_PAIRS=[["A","B"],["C","D"],["E","F"],["G","H"],["I","J"],["K","L"]];
@@ -84,6 +81,27 @@ const GRP_PAIRS=[["A","B"],["C","D"],["E","F"],["G","H"],["I","J"],["K","L"]];
 const mkMs=()=>Object.fromEntries(ALL_MATCHES.map(m=>[m.id,{home:0,away:0}]));
 const mkPreds=()=>({champion:"",runnerUp:"",thirdPlace:"",scorer:"",gw:Object.fromEntries(Object.keys(GROUPS).map(g=>[g,""])),gr:Object.fromEntries(Object.keys(GROUPS).map(g=>[g,""])),extraTime:null,penalties:null,topEur:"",ms:mkMs()});
 const res1x2=s=>s.home>s.away?"H":s.home<s.away?"A":"D";
+
+// ── CLASIFICACIÓN DE GRUPO ────────────────────────────────────────────────────
+function calcGroupStandings(g, ms) {
+  const teams = GROUPS[g];
+  const st = Object.fromEntries(teams.map(t=>[t,{pts:0,gd:0,gf:0,pj:0}]));
+  MATCHES[g].forEach(m=>{
+    const s=ms[m.id];
+    if(!s||s.home===null||s.away===null) return;
+    const h=Number(s.home)||0, a=Number(s.away)||0;
+    st[m.home].gf+=h; st[m.home].gd+=h-a; st[m.home].pj++;
+    st[m.away].gf+=a; st[m.away].gd+=a-h; st[m.away].pj++;
+    if(h>a){ st[m.home].pts+=3; }
+    else if(h===a){ st[m.home].pts+=1; st[m.away].pts+=1; }
+    else{ st[m.away].pts+=3; }
+  });
+  return teams.slice().sort((a,b)=>{
+    if(st[b].pts!==st[a].pts) return st[b].pts-st[a].pts;
+    if(st[b].gd!==st[a].gd) return st[b].gd-st[a].gd;
+    return st[b].gf-st[a].gf;
+  }).map(t=>({name:t,...st[t]}));
+}
 
 function calcScore(preds,res){
   if(!res||!preds)return{total:0,bd:{}};
@@ -148,13 +166,49 @@ function MatchRow({match,score,onChange,result}){
   </div>;
 }
 
+// ── STANDING PANEL ────────────────────────────────────────────────────────────
+function StandingsPanel({g, ms, onUse}) {
+  const s = calcGroupStandings(g, ms);
+  const posIcon = i => i===0?"🥇":i===1?"🥈":i===2?"3️⃣":"4️⃣";
+  return (
+    <div style={{background:"rgba(96,165,250,0.06)",border:"1px solid rgba(96,165,250,0.2)",borderRadius:10,padding:"10px 12px",marginBottom:10}}>
+      <div style={{fontSize:11,color:C.blue,fontWeight:700,marginBottom:8,letterSpacing:0.5}}>📊 CLASIFICACIÓN CALCULADA</div>
+      {s.map((t,i)=>(
+        <div key={t.name} style={{display:"flex",alignItems:"center",gap:6,padding:"3px 0",borderBottom:i<3?`1px solid rgba(96,165,250,0.1)`:"none"}}>
+          <span style={{fontSize:14,width:20}}>{posIcon(i)}</span>
+          <span style={{flex:1,fontSize:12,color:i<2?C.text:C.muted,fontWeight:i<2?600:400}}>{fl(t.name)} {sh(t.name)}</span>
+          <span style={{fontSize:11,color:C.goldL,fontWeight:700,minWidth:30,textAlign:"right"}}>{t.pts}p</span>
+          <span style={{fontSize:11,minWidth:30,textAlign:"right",color:t.gd>0?C.green:t.gd<0?C.red:C.muted}}>{t.gd>0?"+":""}{t.gd}</span>
+          <span style={{fontSize:11,minWidth:24,textAlign:"right",color:C.muted}}>{t.gf}gf</span>
+        </div>
+      ))}
+      <button onClick={()=>onUse(s[0].name, s[1].name)} style={{...base,marginTop:10,width:"100%",padding:"7px 0",borderRadius:8,border:`1.5px solid ${C.gold}`,background:C.goldGlow,color:C.goldL,cursor:"pointer",fontSize:12,fontWeight:700,letterSpacing:0.3}}>
+        ✓ Usar esta clasificación automáticamente
+      </button>
+    </div>
+  );
+}
+
+// ── LOGOS ─────────────────────────────────────────────────────────────────────
+function LogoBadge({top, bottom, right}) {
+  return (
+    <div style={{background:`linear-gradient(135deg,#0D1B2E,#07101E)`,border:`1.5px solid ${C.gold}`,borderRadius:9,padding:"5px 12px",textAlign:"center",minWidth:54}}>
+      <div style={{fontSize:right?11:13,fontWeight:800,color:C.goldL,letterSpacing:right?1:2,lineHeight:1.1}}>{top}</div>
+      <div style={{fontSize:7,color:C.muted,letterSpacing:0.8,marginTop:2,textTransform:"uppercase"}}>{bottom}</div>
+    </div>
+  );
+}
+
 // ── HEADER ────────────────────────────────────────────────────────────────────
 function Header({cd}){
   return <div style={{background:"linear-gradient(180deg,#030810,#07101E)",borderBottom:`1px solid ${C.border}`,padding:"12px 16px 14px",position:"sticky",top:0,zIndex:50}}>
-    <div style={{textAlign:"center",marginBottom:10}}>
-      <div style={{fontSize:9,color:C.muted,letterSpacing:3,textTransform:"uppercase",marginBottom:2}}>Quiniela Familiar · Mundial 2026</div>
-      <div style={{fontSize:19,fontWeight:800,background:`linear-gradient(90deg,${C.goldL},${C.gold})`,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>⚽ GÓMEZ COSME CUP 2026</div>
-      <div style={{fontSize:11,color:C.muted,marginTop:2}}>hernangomez.es · Crisol Santiago</div>
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+      <LogoBadge top="HG" bottom="Hernán G."/>
+      <div style={{flex:1,textAlign:"center",padding:"0 6px"}}>
+        <div style={{fontSize:9,color:C.muted,letterSpacing:3,textTransform:"uppercase",marginBottom:2}}>Quiniela Familiar · Mundial 2026</div>
+        <div style={{fontSize:17,fontWeight:800,background:`linear-gradient(90deg,${C.goldL},${C.gold})`,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",lineHeight:1.2}}>⚽ GÓMEZ COSME CUP 2026</div>
+      </div>
+      <LogoBadge top="⚗️" bottom="Crisol" right/>
     </div>
     <div style={{textAlign:"center"}}>
       {!cd.started
@@ -226,7 +280,6 @@ function HomeView({ranked,results,onPredict}){
           <div key={l} style={{display:"flex",justifyContent:"space-between",padding:"3px 0",borderBottom:`1px solid ${C.border}`,fontSize:12}}><span style={{color:C.text}}>{l}</span><span style={{color:C.goldL,fontWeight:700,marginLeft:4,whiteSpace:"nowrap"}}>{v}</span></div>
         ))}
       </div>
-      <div style={{marginTop:10,padding:8,background:C.goldGlow,borderRadius:8,fontSize:11,color:C.muted,textAlign:"center"}}>Máx. partidos: <strong style={{color:C.blue}}>288 pts</strong> · Máx. global: <strong style={{color:C.goldL}}>186 pts</strong> · Total: <strong style={{color:C.goldL}}>{MAX_PTS} pts</strong></div>
     </Card>
   </div>;
 }
@@ -259,7 +312,7 @@ function PredictView({participants,results,onSave,onBack}){
       const id=eId||uuid();
       const entry={id,name:name.trim(),predictions:preds,savedAt:new Date().toISOString()};
       await onSave(entry);setSaved(true);
-    }catch(e){alert("Error al guardar. Comprueba tu conexión e inténtalo de nuevo.");}
+    }catch(e){alert("Error al guardar. Comprueba tu conexión.");}
     setSaving(false);
   };
 
@@ -309,11 +362,14 @@ function PredictView({participants,results,onSave,onBack}){
                 {MATCHES[g].filter(m=>m.j===j).map(m=><MatchRow key={m.id} match={m} score={preds.ms[m.id]} onChange={s=>updMs(m.id,s)} result={rms[m.id]}/>)}
               </div>
             ))}
-            <div style={{borderTop:`1px solid ${C.border}`,paddingTop:10,marginTop:8}}>
-              <div style={{fontSize:12,color:C.muted,marginBottom:8}}>Clasificados Grupo {g} <span style={{color:C.goldL}}>+{PTS.GRP_1ST}+{PTS.GRP_2ND} pts</span></div>
+
+            {/* CLASIFICACIÓN AUTOMÁTICA */}
+            <div style={{borderTop:`1px solid ${C.border}`,paddingTop:10,marginTop:10}}>
+              <StandingsPanel g={g} ms={preds.ms} onUse={(first,second)=>{updGW(g,first);updGR(g,second);}}/>
+              <div style={{fontSize:12,color:C.muted,marginBottom:8}}>O elige manualmente:</div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-                <div><div style={{fontSize:11,color:C.muted,marginBottom:4}}>🥇 1º</div><TeamSel teams={GROUPS[g]} value={preds.gw[g]} onChange={v=>{updGW(g,v);if(preds.gr[g]===v)updGR(g,"");}} placeholder="1º..."/></div>
-                <div><div style={{fontSize:11,color:C.muted,marginBottom:4}}>🥈 2º</div><TeamSel teams={GROUPS[g]} value={preds.gr[g]} onChange={v=>updGR(g,v)} excl={preds.gw[g]} placeholder="2º..."/></div>
+                <div><div style={{fontSize:11,color:C.muted,marginBottom:4}}>🥇 1º clasificado</div><TeamSel teams={GROUPS[g]} value={preds.gw[g]} onChange={v=>{updGW(g,v);if(preds.gr[g]===v)updGR(g,"");}} placeholder="1º..."/></div>
+                <div><div style={{fontSize:11,color:C.muted,marginBottom:4}}>🥈 2º clasificado</div><TeamSel teams={GROUPS[g]} value={preds.gr[g]} onChange={v=>updGR(g,v)} excl={preds.gw[g]} placeholder="2º..."/></div>
               </div>
             </div>
           </Card>
@@ -335,7 +391,7 @@ function PredictView({participants,results,onSave,onBack}){
           </div>
         ))}
         <div>
-          <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}><span style={{fontSize:13,fontWeight:600}}>⚽ Máximo goleador</span><span style={{fontSize:11,color:C.goldL,fontWeight:700}}>+{PTS.SCORER} pts</span></div>
+          <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}><span style={{fontSize:13,fontWeight:600}}>⚽ Máximo goleador</span><span style={{fontSize:11,color:C.goldL,fontWeight:700}}>+10 pts</span></div>
           <Inp value={preds.scorer} onChange={v=>setPreds(p=>({...p,scorer:v}))} placeholder="Nombre del jugador..."/>
         </div>
       </Card>
@@ -346,15 +402,15 @@ function PredictView({participants,results,onSave,onBack}){
       <div style={{fontSize:18,fontWeight:800,color:C.goldL,marginBottom:4}}>🎲 Preguntas Bonus</div>
       <Card style={{marginBottom:10}}>
         <div style={{marginBottom:18}}>
-          <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}><span style={{fontSize:13,fontWeight:600}}>⏱️ ¿Prórroga en la final?</span><span style={{fontSize:11,color:C.goldL,fontWeight:700}}>+{PTS.EXTRA_TIME} pts</span></div>
+          <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}><span style={{fontSize:13,fontWeight:600}}>⏱️ ¿Prórroga en la final?</span><span style={{fontSize:11,color:C.goldL,fontWeight:700}}>+5 pts</span></div>
           <YesNo value={preds.extraTime} onChange={v=>setPreds(p=>({...p,extraTime:v}))}/>
         </div>
         <div style={{marginBottom:18}}>
-          <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}><span style={{fontSize:13,fontWeight:600}}>🎯 ¿Se decide por penaltis?</span><span style={{fontSize:11,color:C.goldL,fontWeight:700}}>+{PTS.PENALTIES} pts</span></div>
+          <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}><span style={{fontSize:13,fontWeight:600}}>🎯 ¿Se decide por penaltis?</span><span style={{fontSize:11,color:C.goldL,fontWeight:700}}>+5 pts</span></div>
           <YesNo value={preds.penalties} onChange={v=>setPreds(p=>({...p,penalties:v}))}/>
         </div>
         <div>
-          <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}><span style={{fontSize:13,fontWeight:600}}>🇪🇺 Europeo que llega más lejos</span><span style={{fontSize:11,color:C.goldL,fontWeight:700}}>+{PTS.TOP_EUR} pts</span></div>
+          <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}><span style={{fontSize:13,fontWeight:600}}>🇪🇺 Europeo que llega más lejos</span><span style={{fontSize:11,color:C.goldL,fontWeight:700}}>+8 pts</span></div>
           <EurSel value={preds.topEur} onChange={v=>setPreds(p=>({...p,topEur:v}))}/>
         </div>
       </Card>
@@ -365,23 +421,35 @@ function PredictView({participants,results,onSave,onBack}){
       <div style={{fontSize:18,fontWeight:800,color:C.goldL,marginBottom:4}}>👀 Revisar y guardar</div>
       <div style={{fontSize:12,color:C.muted,marginBottom:14}}>Predicciones de <strong style={{color:C.text}}>{name}</strong></div>
       <Card style={{marginBottom:10}}>
-        <div style={{fontWeight:700,fontSize:13,color:C.blue,marginBottom:10}}>⚽ Partidos completados por grupo</div>
+        <div style={{fontWeight:700,fontSize:13,color:C.blue,marginBottom:10}}>⚽ Partidos completados</div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:4}}>
           {Object.keys(GROUPS).map(g=>{
-            const f=MATCHES[g].filter(m=>{const s=preds.ms[m.id];return s&&s.home!==null&&s.away!==null;}).length;
+            const f=MATCHES[g].filter(m=>{const s=preds.ms[m.id];return s&&(s.home>0||s.away>0);}).length;
             return <div key={g} style={{padding:"4px 0",fontSize:12,textAlign:"center"}}>
               <span style={{color:C.gold,fontWeight:700}}>G{g}</span><br/>
-              <span style={{color:f===6?C.green:C.muted}}>{f}/6</span>
+              <span style={{color:f>0?C.green:C.muted}}>{f}/6</span>
             </div>;
           })}
         </div>
       </Card>
       <Card style={{marginBottom:10}}>
+        <div style={{fontWeight:700,fontSize:13,color:C.goldL,marginBottom:10}}>🏆 Clasificados por grupo</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4}}>
+          {Object.keys(GROUPS).map(g=>(
+            <div key={g} style={{padding:"3px 0",borderBottom:`1px solid ${C.border}`,fontSize:12}}>
+              <span style={{color:C.gold,fontWeight:700}}>G{g}: </span>
+              <span style={{color:preds.gw[g]?C.text:C.red}}>{preds.gw[g]?`${fl(preds.gw[g])} ${sh(preds.gw[g])}`:"⚠️"}</span>
+              {preds.gr[g]&&<span style={{color:C.muted}}> · {fl(preds.gr[g])} {sh(preds.gr[g])}</span>}
+            </div>
+          ))}
+        </div>
+      </Card>
+      <Card style={{marginBottom:16}}>
         <div style={{fontWeight:700,fontSize:13,color:C.goldL,marginBottom:10}}>🏆 Final & Bonus</div>
         {[["🥇 Campeón",preds.champion],["🥈 Subcampeón",preds.runnerUp],["🥉 3er puesto",preds.thirdPlace],["⚽ Goleador",preds.scorer],["⏱️ Prórroga",preds.extraTime===null?"—":preds.extraTime?"Sí":"No"],["🎯 Penaltis",preds.penalties===null?"—":preds.penalties?"Sí":"No"],["🇪🇺 Mejor europeo",preds.topEur||"—"]].map(([l,v])=>(
           <div key={l} style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:`1px solid ${C.border}`,fontSize:13}}>
             <span style={{color:C.muted}}>{l}</span>
-            <span style={{color:v&&v!=="—"?C.text:C.red,fontWeight:600}}>{FLAGS[v]||""}{FLAGS[v]?" ":""}{v||"⚠️ Sin rellenar"}</span>
+            <span style={{color:v&&v!=="—"?C.text:C.red,fontWeight:600}}>{FLAGS[v]||""}{FLAGS[v]?" ":""}{v||"⚠️"}</span>
           </div>
         ))}
       </Card>
@@ -439,7 +507,7 @@ function BoardView({ranked,results}){
               </div>;
             })}
           </div>
-          <div style={{marginTop:8,fontSize:10,color:C.muted}}>✓ exacto · ~ resultado · ✗ incorrecto</div>
+          <div style={{marginTop:8,fontSize:10,color:C.muted}}>✓ exacto · ~ resultado correcto · ✗ incorrecto</div>
         </div>}
       </div>
     ))}
@@ -463,6 +531,8 @@ function AdminView({results,onSave}){
     setSaving(false);
   };
   const updMs=(id,s)=>setRes(r=>({...r,ms:{...r.ms,[id]:s}}));
+  const updGW=(g,v)=>setRes(r=>({...r,gw:{...r.gw,[g]:v}}));
+  const updGR=(g,v)=>setRes(r=>({...r,gr:{...r.gr,[g]:v}}));
 
   if(!ok)return <div style={{paddingTop:40,maxWidth:320,margin:"0 auto",textAlign:"center"}}>
     <div style={{fontSize:44,marginBottom:16}}>🔐</div>
@@ -484,7 +554,6 @@ function AdminView({results,onSave}){
     </div>
 
     {tab==="matches"&&<div>
-      <div style={{fontSize:12,color:C.muted,marginBottom:12}}>Introduce el marcador real de cada partido.</div>
       {Object.keys(GROUPS).map(g=>(
         <Card key={g} style={{marginBottom:10}}>
           <div style={{fontWeight:700,color:C.goldL,fontSize:14,marginBottom:4,display:"flex",justifyContent:"space-between"}}><span>Grupo {g}</span><span style={{fontSize:11,color:C.muted}}>{GROUPS[g].map(fl).join(" ")}</span></div>
@@ -494,9 +563,17 @@ function AdminView({results,onSave}){
               {MATCHES[g].filter(m=>m.j===j).map(m=><MatchRow key={m.id} match={m} score={res.ms?.[m.id]??{home:0,away:0}} onChange={s=>updMs(m.id,s)}/>)}
             </div>
           ))}
+          {/* CLASIFICACIÓN EN ADMIN */}
+          <div style={{borderTop:`1px solid ${C.border}`,paddingTop:10,marginTop:8}}>
+            <StandingsPanel g={g} ms={res.ms} onUse={(first,second)=>{updGW(g,first);updGR(g,second);}}/>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:8}}>
+              <div><div style={{fontSize:11,color:C.muted,marginBottom:4}}>🥇 1º clasificado</div><TeamSel teams={GROUPS[g]} value={res.gw?.[g]||""} onChange={v=>updGW(g,v)} placeholder="1º..."/></div>
+              <div><div style={{fontSize:11,color:C.muted,marginBottom:4}}>🥈 2º clasificado</div><TeamSel teams={GROUPS[g]} value={res.gr?.[g]||""} onChange={v=>updGR(g,v)} excl={res.gw?.[g]} placeholder="2º..."/></div>
+            </div>
+          </div>
         </Card>
       ))}
-      <Btn onClick={doSave} disabled={saving} full>{saving?"Guardando...":"💾 Guardar partidos"}</Btn>
+      <Btn onClick={doSave} disabled={saving} full>{saving?"Guardando...":"💾 Guardar partidos y clasificados"}</Btn>
     </div>}
 
     {tab==="global"&&<div>
@@ -509,34 +586,22 @@ function AdminView({results,onSave}){
           </div>
         ))}
         <div>
-          <div style={{fontSize:13,marginBottom:6}}>⚽ Goleador <span style={{color:C.goldL,fontSize:11}}>+{PTS.SCORER} pts</span></div>
+          <div style={{fontSize:13,marginBottom:6}}>⚽ Goleador <span style={{color:C.goldL,fontSize:11}}>+10 pts</span></div>
           <Inp value={res.scorer||""} onChange={v=>setRes(r=>({...r,scorer:v}))} placeholder="Nombre del jugador..."/>
         </div>
-      </Card>
-      <Card style={{marginBottom:12}}>
-        <div style={{fontWeight:700,fontSize:13,color:C.goldL,marginBottom:14}}>📊 Clasificados por grupo</div>
-        {Object.keys(GROUPS).map(g=>(
-          <div key={g} style={{marginBottom:12}}>
-            <div style={{fontSize:13,fontWeight:600,color:C.goldL,marginBottom:6}}>Grupo {g} · {GROUPS[g].map(fl).join(" ")}</div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-              <div><div style={{fontSize:11,color:C.muted,marginBottom:4}}>🥇 1º</div><TeamSel teams={GROUPS[g]} value={res.gw?.[g]||""} onChange={v=>setRes(r=>({...r,gw:{...r.gw,[g]:v}}))} placeholder="1º..."/></div>
-              <div><div style={{fontSize:11,color:C.muted,marginBottom:4}}>🥈 2º</div><TeamSel teams={GROUPS[g]} value={res.gr?.[g]||""} onChange={v=>setRes(r=>({...r,gr:{...r.gr,[g]:v}}))} excl={res.gw?.[g]} placeholder="2º..."/></div>
-            </div>
-          </div>
-        ))}
       </Card>
       <Card style={{marginBottom:16}}>
         <div style={{fontWeight:700,fontSize:13,color:C.goldL,marginBottom:14}}>🎲 Bonus</div>
         <div style={{marginBottom:16}}>
-          <div style={{fontSize:13,marginBottom:8}}>⏱️ ¿Prórroga en la final? <span style={{color:C.goldL,fontSize:11}}>+{PTS.EXTRA_TIME} pts</span></div>
+          <div style={{fontSize:13,marginBottom:8}}>⏱️ ¿Prórroga en la final? <span style={{color:C.goldL,fontSize:11}}>+5 pts</span></div>
           <YesNo value={res.extraTime} onChange={v=>setRes(r=>({...r,extraTime:v}))}/>
         </div>
         <div style={{marginBottom:16}}>
-          <div style={{fontSize:13,marginBottom:8}}>🎯 ¿Penaltis? <span style={{color:C.goldL,fontSize:11}}>+{PTS.PENALTIES} pts</span></div>
+          <div style={{fontSize:13,marginBottom:8}}>🎯 ¿Penaltis? <span style={{color:C.goldL,fontSize:11}}>+5 pts</span></div>
           <YesNo value={res.penalties} onChange={v=>setRes(r=>({...r,penalties:v}))}/>
         </div>
         <div>
-          <div style={{fontSize:13,marginBottom:8}}>🇪🇺 Mejor europeo <span style={{color:C.goldL,fontSize:11}}>+{PTS.TOP_EUR} pts</span></div>
+          <div style={{fontSize:13,marginBottom:8}}>🇪🇺 Mejor europeo <span style={{color:C.goldL,fontSize:11}}>+8 pts</span></div>
           <EurSel value={res.topEur||""} onChange={v=>setRes(r=>({...r,topEur:v}))}/>
         </div>
       </Card>
@@ -552,13 +617,11 @@ function App(){
   const[results,setResults]=useState(null);
   const[loading,setLoading]=useState(true);
   const[cd,setCd]=useState(getCountdown());
-
   useEffect(()=>{
     dbLoad().then(({participants,results})=>{setParts(participants);setResults(results);setLoading(false);});
     const t=setInterval(()=>setCd(getCountdown()),1000);
     return()=>clearInterval(t);
   },[]);
-
   const handleSaveParticipant=async(entry)=>{
     await dbSaveParticipant(entry);
     setParts(prev=>{const idx=prev.findIndex(p=>p.id===entry.id);if(idx>=0){const u=[...prev];u[idx]=entry;return u;}return[...prev,entry];});
