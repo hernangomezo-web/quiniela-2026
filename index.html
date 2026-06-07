@@ -75,6 +75,8 @@ const PTS={CHAMPION:25,RUNNER_UP:15,THIRD:10,SCORER:10,GRP_1ST:6,GRP_2ND:3,EXTRA
 const MAX_PTS=72*4+25+15+10+10+(12*(6+3))+5+5+8;
 const ADMIN_PIN="Mundial26";
 const WC_START=new Date("2026-06-11T18:00:00Z");
+const DEADLINE=new Date("2026-06-11T04:00:00Z"); // 10 jun medianoche Venezuela (UTC-4)
+const isPastDeadline=()=>new Date()>=DEADLINE;
 const GRP_PAIRS=[["A","B"],["C","D"],["E","F"],["G","H"],["I","J"],["K","L"]];
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
@@ -244,7 +246,21 @@ function HomeView({ranked,results,onPredict}){
         </Card>
       ))}
     </div>
-    <div style={{marginBottom:18}}><Btn onClick={onPredict} full>✏️ Hacer mis predicciones</Btn></div>
+    {!isPastDeadline()
+      ? <div style={{marginBottom:18}}><Btn onClick={onPredict} full>✏️ Hacer mis predicciones</Btn></div>
+      : <div style={{background:"rgba(239,68,68,0.08)",border:"1px solid rgba(239,68,68,0.3)",borderRadius:10,padding:"12px 14px",marginBottom:18,textAlign:"center"}}>
+          <div style={{fontSize:20,marginBottom:4}}>🔒</div>
+          <div style={{fontSize:13,fontWeight:700,color:C.red}}>Predicciones cerradas</div>
+          <div style={{fontSize:11,color:C.muted,marginTop:3}}>El plazo terminó el 10 de junio a medianoche</div>
+        </div>
+    }
+    {!isPastDeadline()&&<div style={{background:"rgba(242,197,92,0.08)",border:`1px solid rgba(242,197,92,0.25)`,borderRadius:10,padding:"10px 14px",marginBottom:18,display:"flex",alignItems:"center",gap:10}}>
+      <span style={{fontSize:20}}>⏰</span>
+      <div>
+        <div style={{fontSize:12,fontWeight:700,color:C.goldL}}>Plazo de predicciones</div>
+        <div style={{fontSize:11,color:C.muted}}>Cierra el 10 de junio a medianoche (hora Venezuela)</div>
+      </div>
+    </div>}
     {ranked.length>0&&<Card style={{marginBottom:18}}>
       <div style={{fontWeight:700,color:C.goldL,fontSize:14,marginBottom:14}}>🏅 Top 5 actual</div>
       {ranked.slice(0,5).map((p,i)=>(
@@ -307,7 +323,12 @@ function PredictView({participants,results,onSave,onBack}){
     setSaving(false);
   };
 
-  if(saved)return <div style={{paddingTop:40,textAlign:"center"}}>
+  if(isPastDeadline())return <div style={{paddingTop:40,textAlign:"center"}}>
+    <div style={{fontSize:64,marginBottom:16}}>🔒</div>
+    <div style={{fontSize:20,fontWeight:800,color:C.red,marginBottom:8}}>Plazo cerrado</div>
+    <div style={{color:C.muted,marginBottom:24,fontSize:14,lineHeight:1.7}}>Las predicciones cerraron el<br/><strong style={{color:C.text}}>10 de junio a medianoche</strong> (hora Venezuela).<br/>¡Sigue el ranking en tiempo real!</div>
+    <Btn onClick={onBack} variant="outline">← Ver ranking</Btn>
+  </div>;
     <div style={{fontSize:64,marginBottom:16}}>🎉</div>
     <div style={{fontSize:22,fontWeight:800,color:C.goldL,marginBottom:8}}>¡Predicciones guardadas!</div>
     <div style={{color:C.muted,marginBottom:24,fontSize:14}}>Que la suerte te acompañe, <strong style={{color:C.text}}>{name.trim()}</strong>.</div>
