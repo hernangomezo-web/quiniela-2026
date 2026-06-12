@@ -83,6 +83,8 @@ const GRP_PAIRS=[["A","B"],["C","D"],["E","F"],["G","H"],["I","J"],["K","L"]];
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
 const mkMs=()=>Object.fromEntries(ALL_MATCHES.map(m=>[m.id,{home:0,away:0}]));
+// Para resultados reales: null = no jugado todavía, número = resultado real
+const mkResultMs=()=>Object.fromEntries(ALL_MATCHES.map(m=>[m.id,{home:null,away:null}]));
 const mkPreds=()=>({champion:"",runnerUp:"",thirdPlace:"",scorer:"",gw:Object.fromEntries(Object.keys(GROUPS).map(g=>[g,""])),gr:Object.fromEntries(Object.keys(GROUPS).map(g=>[g,""])),extraTime:null,penalties:null,topEur:"",ms:mkMs()});
 const res1x2=s=>s.home>s.away?"H":s.home<s.away?"A":"D";
 
@@ -169,6 +171,31 @@ function MatchRow({match,score,onChange,result}){
     <div style={{flex:1,textAlign:"left",fontSize:12,overflow:"hidden"}}><span style={{color:hint||C.text,fontWeight:600}}>{sh(away)}</span><span style={{marginLeft:3}}>{fl(away)}</span></div>
   </div>;
 }
+// Fila de partido en el ADMIN con botón de confirmar jugado
+function AdminMatchRow({match,score,onChange}){
+  const played=score!==null&&score.home!==null&&score.away!==null;
+  const h=played?score.home:0;
+  const a=played?score.away:0;
+  return <div style={{padding:"7px 0",borderBottom:`1px solid rgba(200,146,42,0.1)`}}>
+    <div style={{display:"flex",alignItems:"center",gap:4,opacity:played?1:0.4}}>
+      <div style={{flex:1,textAlign:"right",fontSize:12,overflow:"hidden"}}><span style={{marginRight:3}}>{fl(match.home)}</span><span style={{fontWeight:600}}>{sh(match.home)}</span></div>
+      <div style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}}>
+        {played
+          ?<><ScoreNum val={h} onInc={()=>onChange({home:h+1,away:a})} onDec={()=>onChange({home:Math.max(0,h-1),away:a})}/><span style={{color:C.muted,fontSize:13,fontWeight:700}}>:</span><ScoreNum val={a} onInc={()=>onChange({home:h,away:a+1})} onDec={()=>onChange({home:h,away:Math.max(0,a-1)})}/></>
+          :<span style={{color:C.muted,fontSize:13,fontWeight:700,padding:"0 10px"}}>vs</span>
+        }
+      </div>
+      <div style={{flex:1,textAlign:"left",fontSize:12,overflow:"hidden"}}><span style={{fontWeight:600}}>{sh(match.away)}</span><span style={{marginLeft:3}}>{fl(match.away)}</span></div>
+    </div>
+    <div style={{textAlign:"center",marginTop:5}}>
+      {played
+        ?<button onClick={()=>onChange({home:null,away:null})} style={{...base,fontSize:10,color:C.green,background:"rgba(34,197,94,0.08)",border:`1px solid ${C.green}`,borderRadius:5,padding:"2px 10px",cursor:"pointer"}}>✅ Jugado · pulsa para desmarcar</button>
+        :<button onClick={()=>onChange({home:0,away:0})} style={{...base,fontSize:10,color:C.muted,background:"rgba(107,114,128,0.08)",border:"1px solid rgba(107,114,128,0.3)",borderRadius:5,padding:"2px 10px",cursor:"pointer"}}>○ Marcar como jugado</button>
+      }
+    </div>
+  </div>;
+}
+
 function StandingsPanel({g,ms,onUse}){
   const s=calcGroupStandings(g,ms);
   const pos=i=>i===0?"🥇":i===1?"🥈":i===2?"3️⃣":"4️⃣";
@@ -546,7 +573,7 @@ function BoardView({ranked,results}){
 // ── ADMIN ─────────────────────────────────────────────────────────────────────
 function AdminView({results,onSave}){
   const[pin,setPin]=useState("");const[ok,setOk]=useState(false);const[pinErr,setPinErr]=useState("");
-  const blank=()=>({champion:"",runnerUp:"",thirdPlace:"",scorer:"",gw:Object.fromEntries(Object.keys(GROUPS).map(g=>[g,""])),gr:Object.fromEntries(Object.keys(GROUPS).map(g=>[g,""])),extraTime:null,penalties:null,topEur:"",ms:mkMs()});
+  const blank=()=>({champion:"",runnerUp:"",thirdPlace:"",scorer:"",gw:Object.fromEntries(Object.keys(GROUPS).map(g=>[g,""])),gr:Object.fromEntries(Object.keys(GROUPS).map(g=>[g,""])),extraTime:null,penalties:null,topEur:"",ms:mkResultMs()});
   const[res,setRes]=useState(()=>results?{...blank(),...results,gw:{...blank().gw,...results.gw},gr:{...blank().gr,...results.gr},ms:{...blank().ms,...results.ms}}:blank());
   const[tab,setTab]=useState("matches");
   const[msg,setMsg]=useState("");
@@ -588,7 +615,7 @@ function AdminView({results,onSave}){
           {[1,2,3].map(j=>(
             <div key={j}>
               <div style={{fontSize:10,color:C.blue,fontWeight:700,marginTop:8,marginBottom:4,letterSpacing:0.5}}>JORNADA {j}{j===3?" · SIMULTÁNEOS":""}</div>
-              {MATCHES[g].filter(m=>m.j===j).map(m=><MatchRow key={m.id} match={m} score={res.ms?.[m.id]??{home:0,away:0}} onChange={s=>updMs(m.id,s)}/>)}
+              {MATCHES[g].filter(m=>m.j===j).map(m=><AdminMatchRow key={m.id} match={m} score={res.ms?.[m.id]??{home:null,away:null}} onChange={s=>updMs(m.id,s)}/>)}
             </div>
           ))}
           <div style={{borderTop:`1px solid ${C.border}`,paddingTop:10,marginTop:8}}>
