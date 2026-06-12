@@ -518,6 +518,154 @@ function PredictView({participants,results,onSave,onBack}){
   </div>;
 }
 
+// ── DETAIL VIEW ───────────────────────────────────────────────────────────────
+function DetailView({p, results}){
+  const [tab, setTab] = useState("resumen");
+  const rms = results?.ms||{};
+
+  // Comparación de predicción global vs real
+  function GlobalRow({icon, label, pred, real, isBoolean}){
+    const known = real!==null && real!==undefined && real!=='';
+    let match = false;
+    if(known && pred!==null && pred!==undefined){
+      match = isBoolean ? pred===real : String(pred).toLowerCase().trim()===String(real).toLowerCase().trim();
+    }
+    const predStr = isBoolean ? (pred===null?"—":pred?"Sí":"No") : (pred||"—");
+    const realStr = isBoolean ? (real===null||real===undefined?"":real?"Sí":"No") : (real||"");
+    return (
+      <div style={{display:"flex",alignItems:"center",gap:8,padding:"5px 0",borderBottom:`1px solid ${C.border}`}}>
+        <span style={{fontSize:14,width:20}}>{icon}</span>
+        <span style={{fontSize:11,color:C.muted,width:90,flexShrink:0}}>{label}</span>
+        <span style={{flex:1,fontSize:12,fontWeight:600,color:C.text}}>{FLAGS[predStr]||""}{FLAGS[predStr]?" ":""}{predStr}</span>
+        {known
+          ?<span style={{fontSize:11,fontWeight:700,color:match?C.green:C.red}}>{match?"✅":`❌ ${FLAGS[realStr]||""}${FLAGS[realStr]?" ":""}${realStr}`}</span>
+          :<span style={{fontSize:10,color:C.muted}}>⏳ Pendiente</span>
+        }
+      </div>
+    );
+  }
+
+  return (
+    <div style={{background:C.card2,border:`1px solid ${C.border}`,borderTop:"none",borderRadius:"0 0 12px 12px",overflow:"hidden"}}>
+      {/* Tabs */}
+      <div style={{display:"flex",background:"rgba(0,0,0,0.2)"}}>
+        {[{id:"resumen",label:"📊 Resumen"},{id:"global",label:"🏆 Final & Bonus"},{id:"partidos",label:"⚽ Partidos"}].map(t=>(
+          <button key={t.id} onClick={()=>setTab(t.id)} style={{...base,flex:1,padding:"8px 4px",border:"none",borderBottom:`2px solid ${tab===t.id?C.gold:"transparent"}`,background:"transparent",color:tab===t.id?C.goldL:C.muted,fontSize:11,fontWeight:tab===t.id?700:400,cursor:"pointer"}}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      <div style={{padding:14}}>
+
+        {/* TAB: RESUMEN */}
+        {tab==="resumen"&&<div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:14}}>
+            {[{l:"⚽ Partidos",k:"matches"},{l:"📊 Grupos",k:"grp"},{l:"🏆 Final",k:"fin"},{l:"🎲 Bonus",k:"bonus"}].map(({l,k})=>(
+              <div key={k} style={{background:C.goldGlow,borderRadius:8,padding:"8px 4px",textAlign:"center"}}>
+                <div style={{fontSize:14,fontWeight:800,color:p.score.bd[k]>0?C.goldL:C.muted}}>{p.score.bd[k]||0}</div>
+                <div style={{fontSize:9,color:C.muted,marginTop:2}}>{l}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{fontSize:12,color:C.goldL,fontWeight:700,marginBottom:8}}>Partidos por grupo</div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:4,marginBottom:8}}>
+            {Object.keys(GROUPS).map(g=>{
+              let ex=0,ok=0,ko=0;
+              MATCHES[g].forEach(m=>{
+                const rm=rms[m.id];const pm=p.predictions.ms?.[m.id];
+                if(!rm||rm.home===null)return;
+                if(!pm||pm.home===null){ko++;return;}
+                if(pm.home===rm.home&&pm.away===rm.away)ex++;
+                else if(res1x2(pm)===res1x2(rm))ok++;
+                else ko++;
+              });
+              return <div key={g} style={{fontSize:11,padding:"3px 0",borderBottom:`1px solid ${C.border}`}}>
+                <span style={{color:C.gold,fontWeight:700}}>G{g} </span>
+                {ex>0&&<span style={{color:C.green}}>✓{ex} </span>}
+                {ok>0&&<span style={{color:C.blue}}>~{ok} </span>}
+                {ko>0&&<span style={{color:C.red}}>✗{ko}</span>}
+              </div>;
+            })}
+          </div>
+          <div style={{fontSize:10,color:C.muted}}>✓ exacto (4pts) · ~ resultado correcto (2pts) · ✗ incorrecto (0pts)</div>
+        </div>}
+
+        {/* TAB: GLOBAL */}
+        {tab==="global"&&<div>
+          <GlobalRow icon="🥇" label="Campeón" pred={p.predictions.champion} real={results?.champion}/>
+          <GlobalRow icon="🥈" label="Subcampeón" pred={p.predictions.runnerUp} real={results?.runnerUp}/>
+          <GlobalRow icon="🥉" label="3er puesto" pred={p.predictions.thirdPlace} real={results?.thirdPlace}/>
+          <GlobalRow icon="⚽" label="Goleador" pred={p.predictions.scorer} real={results?.scorer}/>
+          <GlobalRow icon="🇪🇺" label="Mejor europeo" pred={p.predictions.topEur} real={results?.topEur}/>
+          <GlobalRow icon="⏱️" label="Prórroga final" pred={p.predictions.extraTime} real={results?.extraTime} isBoolean/>
+          <GlobalRow icon="🎯" label="Penaltis final" pred={p.predictions.penalties} real={results?.penalties} isBoolean/>
+          <div style={{marginTop:12}}>
+            <div style={{fontSize:12,color:C.goldL,fontWeight:700,marginBottom:8}}>📊 Clasificados por grupo</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4}}>
+              {Object.keys(GROUPS).map(g=>{
+                const gw=p.predictions.gw?.[g];const gr=p.predictions.gr?.[g];
+                const rw=results?.gw?.[g];const rr=results?.gr?.[g];
+                return <div key={g} style={{padding:"4px 6px",background:"rgba(255,255,255,0.02)",borderRadius:6,border:`1px solid ${C.border}`,fontSize:11}}>
+                  <span style={{color:C.gold,fontWeight:700}}>G{g} </span>
+                  <span style={{color:rw?(gw===rw?C.green:C.red):C.text}}>{fl(gw)} {sh(gw||"—")}</span>
+                  <span style={{color:C.muted}}> · </span>
+                  <span style={{color:rr?(gr===rr?C.green:C.red):C.text}}>{fl(gr)} {sh(gr||"—")}</span>
+                </div>;
+              })}
+            </div>
+          </div>
+        </div>}
+
+        {/* TAB: PARTIDOS */}
+        {tab==="partidos"&&<div>
+          <div style={{fontSize:11,color:C.muted,marginBottom:10}}>
+            <span style={{color:C.green}}>●</span> Exacto 4pts &nbsp;
+            <span style={{color:C.blue}}>●</span> Resultado correcto 2pts &nbsp;
+            <span style={{color:C.red}}>●</span> Incorrecto 0pts &nbsp;
+            <span style={{color:C.muted}}>○</span> Pendiente
+          </div>
+          {Object.keys(GROUPS).map(g=>(
+            <div key={g} style={{marginBottom:12}}>
+              <div style={{fontSize:11,color:C.gold,fontWeight:700,marginBottom:4,paddingBottom:3,borderBottom:`1px solid ${C.border}`}}>
+                Grupo {g} · {GROUPS[g].map(fl).join(" ")}
+              </div>
+              {MATCHES[g].map(m=>{
+                const pm=p.predictions.ms?.[m.id];
+                const rm=rms[m.id];
+                const played=rm&&rm.home!==null&&rm.away!==null;
+                let col=C.muted,pts=null;
+                if(played&&pm&&pm.home!==null){
+                  if(pm.home===rm.home&&pm.away===rm.away){col=C.green;pts=4;}
+                  else if(res1x2(pm)===res1x2(rm)){col=C.blue;pts=2;}
+                  else{col=C.red;pts=0;}
+                }
+                return (
+                  <div key={m.id} style={{display:"flex",alignItems:"center",fontSize:11,padding:"3px 0",borderBottom:"1px solid rgba(255,255,255,0.04)"}}>
+                    <span style={{color:"rgba(200,146,42,0.4)",width:8,flexShrink:0}}>●</span>
+                    <span style={{flex:1,textAlign:"right",color:C.muted,overflow:"hidden",whiteSpace:"nowrap"}}>{fl(m.home)} {sh(m.home)}</span>
+                    <span style={{color:col,fontWeight:800,padding:"0 6px",minWidth:34,textAlign:"center",flexShrink:0}}>
+                      {pm&&pm.home!==null?`${pm.home}-${pm.away}`:"—"}
+                    </span>
+                    <span style={{flex:1,textAlign:"left",color:C.muted,overflow:"hidden",whiteSpace:"nowrap"}}>{sh(m.away)} {fl(m.away)}</span>
+                    <span style={{fontSize:10,color:C.muted,minWidth:36,textAlign:"center",flexShrink:0}}>
+                      {played?`(${rm.home}-${rm.away})`:""}
+                    </span>
+                    <span style={{fontSize:10,fontWeight:700,color:col,minWidth:20,textAlign:"right",flexShrink:0}}>
+                      {pts!==null?`${pts}p`:""}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </div>}
+
+      </div>
+    </div>
+  );
+}
+
 // ── BOARD ─────────────────────────────────────────────────────────────────────
 function BoardView({ranked,results}){
   const[exp,setExp]=useState(null);
